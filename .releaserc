@@ -1,6 +1,6 @@
 branches:
   - trunk
-repositoryUrl: "https://github.com/stone-home/Template-Obsidian-Plugin"
+repositoryUrl: "https://github.com/stone-home/Obsidian-Plugin-Translate-Code-Block"
 plugins:
   - "@semantic-release/commit-analyzer"
   - "@semantic-release/release-notes-generator"

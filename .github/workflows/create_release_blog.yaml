@@ -18,5 +18,5 @@ jobs:
           release-body: ${{ github.event.release.body }} # Body of the release
           release-url: ${{ github.event.release.html_url }} # URL of the release
           python-version: "3.12" # Python version to use
-          project-name: "Node.js Template"
+          project-name: "Obsidian Plugin - Translate Code Block"
           onepass-token: ${{ secrets.OP_ACCOUNT_TOKEN }} # 1Password service account token
