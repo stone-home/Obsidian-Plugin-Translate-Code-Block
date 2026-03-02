@@ -14,7 +14,7 @@
 - **Translate code block:** Custom fenced block `translate-block` in markdown; source text is stored permanently in the note; translation is shown in a separate output panel only (not written back to the note).
 - **Manual-first:** Default mode per block is manual; user clicks **Translate** to send one request. Optional **Auto** toggle per block enables polling (always off when a note is loaded).
 - **Polling:** Configurable interval (default 1s, minimum 500ms). Only blocks in auto mode are polled; change detection (hash of source + langs + model + prompt) avoids duplicate requests; per-block “busy” state prevents overlapping jobs.
-- **Two panels:** Input panel (source text) and output panel (translated text) rendered below when the user leaves the code block (preview/live preview). Width of output panel auto-fits the container.
+- **Two panels:** Input panel (source text) and output panel (translated text) rendered below when the user leaves the code block (preview/live preview). Input panel and output panel use full width of the container; input textarea has a minimum height (e.g. 120px) so it is usable and does not appear cramped.
 
 ### 1.2 Settings (Global)
 - **Endpoint URL:** Base URL only (e.g. `http://100.86.122.40:31435`). Plugin appends path automatically: `/v1/chat/completions` for OpenAI-compatible backend (default).
@@ -26,6 +26,8 @@
 - **Request timeout (ms):** e.g. 15000–30000.
 - **Max block size (characters):** Above this, auto-translate is skipped; manual translate can still run with a warning.
 - **Extra headers:** Newline-separated `Key: Value` (e.g. `Authorization: Bearer ...`).
+- **Debug:** Toggle in settings. When on, debug logs (e.g. request URL, model, response status) are printed to the browser console (Developer Tools). When off, no debug logs are emitted; `console.error` for real errors remains always visible.
+- **Settings UI layout:** Default prompt and Extra headers use a dedicated layout: their input fields are placed on the next line below the header/description (not inline), span the full width of the settings panel, and have a minimum height (e.g. 100px) for the textareas so they are readable and fit the setting window when resized.
 
 ### 1.3 Per-Block Configuration
 - **Fence attributes:** `source=`, `target=`, `model=`, `prompt=` in the block header (e.g. ` ```translate-block source=en target=zh `). Missing or invalid values fall back to global defaults.
@@ -49,7 +51,7 @@
 
 ### 1.6 Backlog (Explicit User Requests)
 - **Endpoint auto-path:** User enters only base URL in settings; plugin appends `/v1/chat/completions` (or `/api/chat` for Ollama) in code. If URL already ends with that path, do not double-append.
-- **Debug button and window:** Per-block or global way to show last (or next) request: URL, headers, and request body in a visible debug panel/window (e.g. collapsible section or modal).
+- **Debug (implemented):** Global **Debug** toggle in settings; when on, `console.log` in the translation backend is enabled (URL, model, response status). When off, debug logs are suppressed. *Remaining backlog:* optional debug panel/window showing last request URL, headers, and body in the UI (e.g. collapsible section or modal).
 - **Connection test button:** In plugin settings, a “Test connection” button that sends a minimal request to the configured endpoint and shows success or error (e.g. Notice or inline status).
 
 ## 2. Execution Plan
@@ -66,19 +68,21 @@
 - [x] Ensure block state refresh: on re-render, update `sourceLang`, `targetLang`, `model`, `prompt` from fence + global defaults so UI and effective config stay in sync.
 - [x] Editable input panel (textarea) in preview that updates in-memory `sourceText` without continuously rewriting the underlying markdown.
 - [x] Manual “Save to block” action that writes the current input panel content back into the fenced `translate-block`, accepting a one-time re-render when invoked.
+- [x] **Settings UI:** Default prompt and Extra headers fields on a new line below their headers; full width and min height for those textareas; CSS scoped to `.setting-control-on-new-line` so only settings are affected.
+- [x] **Code block input panel:** Full-width and min-height styling for the translate-block Input panel (`.translate-block-container`, `.translate-block-input`, `.translate-block-input-area`) so width and height fit the code block container in the note.
+- [x] **Debug toggle and gated console.log:** Global **Debug** toggle in settings tab; `TranslateBlockSettings.debug` and `TranslationRequestOptions.debug`; `debugLog()` in translation-backend only logs when `options.debug` is true. All previous `console.log` calls in the backend are gated; `console.error` for real errors remains always on.
 
 ### 2.2 To Do (Backlog)
 - [ ] **Endpoint auto-path:** In backend, derive full URL from base: if base does not end with `/v1/chat/completions` (OpenAI) or `/api/chat` (Ollama), append the appropriate path. Update settings description to “Base URL (path is added automatically)”.
 - [ ] **Use settings.defaultModel for API call:** In `runTranslationJob`, pass `this.settings.defaultModel` (or resolved per-block override from fence) to `backend.translate` so the request never uses a stale cached model.
-- [ ] **Debug button and window:** Add optional debug mode (e.g. setting or per-block “Debug” button). Before/after request, store last request URL, headers, body; show in a collapsible `<details>` or modal. Ensure no sensitive data is logged in production by default.
+- [ ] **Debug panel (optional):** Optional UI to show last request URL, headers, and body in a collapsible section or modal; ensure no sensitive data shown by default. (Console-based debug logging is already implemented via the Debug toggle.)
 - [ ] **Connection test button:** In settings tab, add “Test connection” that calls the same endpoint (or a minimal POST/GET) with current settings and displays result in a Notice or inline text.
-- [ ] **Remove or gate console.log:** Once debug UI exists, remove or guard `console.log` in translation-backend (e.g. only when debug setting is on).
 
 ## 3. Acceptance Criteria
 
 - User can set only base URL in settings; translation works against `{base}/v1/chat/completions`.
 - Changing default model in settings is reflected on the very next Translate (no cached “llama3”).
-- User can open a debug view and see the exact request URL, headers, and body used for a translation.
+- User can enable Debug in settings to see request URL, model, and response status in the browser console; with Debug off, no debug logs are printed.
 - User can click “Test connection” in settings and see immediate success/failure for the configured endpoint.
 - User can freely type in the Input panel without their cursor being lost when auto-translate runs or a manual Translate is triggered.
 - The markdown `translate-block` content only changes when the user explicitly invokes the “Save to block” action (or edits the code block directly), not on every keystroke in the Input panel.

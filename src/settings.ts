@@ -15,6 +15,8 @@ export interface TranslateBlockSettings {
 	 * Extra HTTP headers as a newline-separated list of `Key: Value` pairs.
 	 */
 	extraHeadersRaw: string;
+	/** When enabled, debug logs are printed to the console. */
+	debug: boolean;
 }
 
 export const MIN_POLL_INTERVAL_MS = 500;
@@ -31,6 +33,7 @@ export const DEFAULT_SETTINGS: TranslateBlockSettings = {
 	timeoutMs: 20000,
 	maxChars: 4000,
 	extraHeadersRaw: "",
+	debug: false,
 };
 
 export class TranslateBlockSettingTab extends PluginSettingTab {
@@ -46,6 +49,18 @@ export class TranslateBlockSettingTab extends PluginSettingTab {
 
 		containerEl.empty();
 		containerEl.createEl("h2", { text: "Translate Block Settings" });
+
+		new Setting(containerEl)
+			.setName("Debug")
+			.setDesc("Enable to print debug logs to the browser console (Developer Tools).")
+			.addToggle((toggle) =>
+				toggle
+					.setValue(this.plugin.settings.debug ?? false)
+					.onChange(async (value) => {
+						this.plugin.settings.debug = value;
+						await this.plugin.saveSettings();
+					}),
+			);
 
 		new Setting(containerEl)
 			.setName("Endpoint URL")
@@ -165,6 +180,7 @@ export class TranslateBlockSettingTab extends PluginSettingTab {
 		new Setting(containerEl)
 			.setName("Default prompt")
 			.setDesc("Prompt template for translation. You can use {{sourceLang}} and {{targetLang}} placeholders.")
+			.setClass("setting-control-on-new-line")
 			.addTextArea((text) =>
 				text
 					.setPlaceholder(DEFAULT_SETTINGS.defaultPrompt)
@@ -178,6 +194,7 @@ export class TranslateBlockSettingTab extends PluginSettingTab {
 		new Setting(containerEl)
 			.setName("Extra headers")
 			.setDesc("Optional HTTP headers as `Key: Value`, one per line. Useful for API keys or custom auth.")
+			.setClass("setting-control-on-new-line")
 			.addTextArea((text) =>
 				text
 					.setPlaceholder("Authorization: Bearer YOUR_TOKEN")

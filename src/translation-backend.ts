@@ -7,6 +7,8 @@ export interface TranslationRequestOptions {
 	timeoutMs: number;
 	prompt: string;
 	extraHeadersRaw: string;
+	/** When true, debug logs are printed to the console. */
+	debug?: boolean;
 }
 
 export interface TranslationBackend {
@@ -49,6 +51,12 @@ function buildPromptTemplate(prompt: string, sourceLang: string, targetLang: str
 	return result;
 }
 
+function debugLog(options: TranslationRequestOptions, ...args: unknown[]): void {
+	if (options.debug) {
+		console.log("[translate-block]", ...args);
+	}
+}
+
 class OpenAICompatibleBackend implements TranslationBackend {
 	async translate(
 		text: string,
@@ -58,7 +66,7 @@ class OpenAICompatibleBackend implements TranslationBackend {
 	): Promise<string> {
 		const url = (options.endpointUrl || DEFAULT_SETTINGS.endpointUrl).replace(/\/$/, "");
 
-		console.log("[translate-block] POST →", url);
+		debugLog(options, "POST →", url);
 
 		const systemPrompt = buildPromptTemplate(options.prompt, sourceLang, targetLang);
 		const payload = JSON.stringify({
@@ -70,7 +78,7 @@ class OpenAICompatibleBackend implements TranslationBackend {
 			temperature: 0.2,
 		});
 
-		console.log("[translate-block] model:", options.model || DEFAULT_SETTINGS.defaultModel);
+		debugLog(options, "model:", options.model || DEFAULT_SETTINGS.defaultModel);
 
 		const response = await requestUrl({
 			url,
@@ -81,7 +89,7 @@ class OpenAICompatibleBackend implements TranslationBackend {
 			throw: false,
 		});
 
-		console.log("[translate-block] Response status:", response.status);
+		debugLog(options, "Response status:", response.status);
 
 		if (response.status < 200 || response.status >= 300) {
 			throw new Error(`HTTP ${response.status}: ${response.text || "Unknown error"}`);
@@ -110,7 +118,7 @@ class OllamaBackend implements TranslationBackend {
 	): Promise<string> {
 		const url = (options.endpointUrl || DEFAULT_SETTINGS.endpointUrl).replace(/\/$/, "");
 
-		console.log("[translate-block] POST →", url);
+		debugLog(options, "POST →", url);
 
 		const systemPrompt = buildPromptTemplate(options.prompt, sourceLang, targetLang);
 		const payload = JSON.stringify({
@@ -131,7 +139,7 @@ class OllamaBackend implements TranslationBackend {
 			throw: false,
 		});
 
-		console.log("[translate-block] Response status:", response.status);
+		debugLog(options, "Response status:", response.status);
 
 		if (response.status < 200 || response.status >= 300) {
 			throw new Error(`HTTP ${response.status}: ${response.text || "Unknown error"}`);

@@ -422,6 +422,7 @@ export default class TranslateBlockPlugin extends Plugin {
 					timeoutMs: this.settings.timeoutMs,
 					prompt: state.prompt,
 					extraHeadersRaw: this.settings.extraHeadersRaw,
+					debug: this.settings.debug,
 				});
 
 				state.outputEl.empty();
