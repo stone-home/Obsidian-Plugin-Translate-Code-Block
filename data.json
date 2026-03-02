@@ -1,0 +1,12 @@
+{
+  "endpointUrl": "http://100.86.122.40:31435/api/chat",
+  "defaultModel": "translategemma:12b",
+  "defaultPrompt": "Translate the following text from {{sourceLang}} to {{targetLang}}. Only return the translated text.",
+  "defaultSourceLang": "auto",
+  "defaultTargetLang": "zh",
+  "pollIntervalMs": 1000,
+  "maxAttempts": 3,
+  "timeoutMs": 20000,
+  "maxChars": 4000,
+  "extraHeadersRaw": ""
+}
