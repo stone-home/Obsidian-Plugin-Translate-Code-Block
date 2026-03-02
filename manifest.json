@@ -1,0 +1,9 @@
+{
+	"id": "template-obsidian-plugin",
+	"name": "Template for Development of Obsidian Plugin",
+	"version": "1.0.0",
+	"minAppVersion": "0.15.0",
+	"description": "Here need to fill a brief of plugin",
+	"author": "Stone",
+	"authorUrl": "https://github.com/stone-home/Template-Obsidian-Plugin.git#readme"
+}

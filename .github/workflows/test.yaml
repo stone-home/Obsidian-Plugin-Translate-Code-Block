@@ -1,0 +1,19 @@
+name: Code testing
+
+on:
+  push:
+    branches-ignore:
+      - trunk
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: stone-home/Action-Stone-DevOps/.github/actions/nodejs-test@trunk
+        with:
+          node-version: "24"
+

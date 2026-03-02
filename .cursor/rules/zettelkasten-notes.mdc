@@ -1,0 +1,64 @@
+---
+description: Zettelkasten Atomic and Protocol note generation (docs/notes/)
+alwaysApply: true
+---
+
+# Zettelkasten Knowledge Management
+
+**Trigger:** When asked to generate an "Atomic" or "Protocol" note.
+**Context Boundaries:** Strictly limit context to project code and current Agent history prior to the command.
+**Deduplication:** Check `docs/notes/` for existing content. Merge if identical/overlapping; use `[[Wiki-Links]]` if related.
+
+## Note Types & Naming
+
+- **Directory:** `docs/notes/`
+- **Atomic (Concepts/Theories):** `A-<Category>-<Sub-Category>-<Subjective Thesis>.md`
+- **Protocol (Procedures/How-tos):** `Protocol-<Category>-<Sub-Category>-<Specific Task>.md`
+
+## Atomic Note Template
+
+```markdown
+# A - <Category> - <Sub-Category> - <Subjective Thesis>
+**Date:** YYYY-MM-DD | **Tags:** [empirical, theoretical, technical, concept] | **Note ID:** [unique lowercase alphanumeric ID]
+
+#### 🔗 Source
+(Optional context/references)
+
+#### 💭 Thoughts
+- (Meta-analysis/reflections)
+
+# ⚡️ Key Points
+- **Definition:** (Precise definition)
+- **[Concept Name]:** (Explanation)
+    - **Sub-point:** (Nested details)
+```
+
+## Protocol Note Template
+
+```markdown
+# Protocol - <Category> - <Sub-Category> - <Specific Task>
+**Date:** YYYY-MM-DD | **Tags:** [empirical, technical] | **Note ID:** [unique lowercase alphanumeric ID]
+
+# 1. Quick Snippet
+## [Scenario]
+\`\`\`<language>
+(code)
+\`\`\`
+
+# 2. Environment Setup
+- (Prerequisites/dependencies)
+
+# 3. Troubleshooting
+- (Problem statement)
+    - **[Technical Concept]**: (Explanation)
+    - **[Solution]**: (Details)
+
+# 4. Extra Information
+(References)
+```
+
+## Execution Protocol (CRITICAL)
+
+1. **Analyze:** Determine note type and category, extracting concepts entirely from the allowed context.
+2. **Prepare:** Generate all content, tags, and IDs in memory.
+3. **Preview:** Present the complete, fully formatted note preview to the user.

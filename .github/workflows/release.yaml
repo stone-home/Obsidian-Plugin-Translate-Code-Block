@@ -1,0 +1,12 @@
+name: Release
+on: workflow_dispatch
+jobs:
+  release:
+    uses: stone-home/Action-Stone-DevOps/.github/workflows/w-v2-release.yaml@trunk
+    with:
+      version-id: ${{ github.event.release.name }}
+      nodejs-project: true
+      nodejs-version: '24'
+    secrets:
+      onepass-token: ${{ secrets.OP_ACCOUNT_TOKEN }}
+

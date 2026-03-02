@@ -1,0 +1,11 @@
+---
+description: General behavior, language constraints, and workflow principles
+alwaysApply: true
+---
+
+# Global Instructions
+
+- **Artifacts:** Generate all code, comments, docs, logs, and UI strings strictly in **English**. No Chinese.
+- **Conversation:** Match the user's language (Chinese or English).
+- **Principles:** DRY (modularity), robust error handling (try-catch/exit codes), CI/CD ready (testable/lint-friendly). Avoid redundant comments.
+- **Workflow:** Briefly explain significant architectural refactors before rewriting. Suggest unit tests (pytest, Vitest/Jest) for heavy logic.

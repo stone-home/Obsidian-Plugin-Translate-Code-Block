@@ -1,0 +1,13 @@
+---
+description: Python coding standards (PEP 8, type hints, docstrings)
+globs:
+  - "**/*.py"
+alwaysApply: false
+---
+
+# Python
+
+- **Style:** **PEP 8**. Use **type hints** for function args and return values.
+- **Paths:** Prefer `pathlib` over `os.path`; use f-strings for formatting.
+- **Dependencies:** Manage via `requirements.txt` or `pyproject.toml`; pin versions in deployment.
+- **Docstrings:** **Google Style** — include Args, Returns, Raises for public functions and modules.

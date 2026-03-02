@@ -1,0 +1,18 @@
+---
+description: DevOps conventions (Kubernetes, Ansible, IaaS, autoDeploy, SSH)
+globs:
+  - "**/*.yaml"
+  - "**/*.yml"
+  - "**/Dockerfile*"
+  - "**/*.tf"
+  - "**/docker-compose*.yml"
+alwaysApply: false
+---
+
+# DevOps
+
+- **Kubernetes / Kustomize / Helm:** Use consistent naming (lowercase, hyphens); keep manifests in version control; prefer Kustomize overlays or Helm values over copy-paste; document default overrides (e.g. HELM-DEFAULTS.md) where used.
+- **Ansible:** Use roles for reuse; keep playbooks thin; use `ansible-lint`; prefer `command:`/`shell:` with `changed_when` when needed; use env files or group_vars for secrets and env-specific config; document limit patterns and pre-tasks in protocol notes.
+- **IaaS / Terraform:** State in remote backend; avoid sensitive values in `.tf`; use variables and modules; document required vars and outputs.
+- **Auto-deploy / CI:** Scripts and pipelines should be idempotent where possible; use tags or targets for partial runs; document SSH keys, deploy user, and required env (e.g. FIX-ARGOCD-SSH-KEY style docs).
+- **SSH:** Prefer key-based auth; document key placement and `authorized_keys` expectations; avoid hardcoding keys in repos; use ESO or vault for secrets when available.

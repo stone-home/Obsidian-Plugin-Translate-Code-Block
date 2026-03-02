@@ -1,0 +1,32 @@
+name: Super Linter
+
+on:
+  push:
+    branches-ignore:
+      - trunk
+  pull_request:
+
+permissions:
+  contents: read
+  statuses: write
+
+jobs:
+  superLint:
+    name: linter
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
+      statuses: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: stone-home/Action-Stone-DevOps/.github/actions/linter@trunk
+        with:
+          onepass-token: ${{ secrets.OP_ACCOUNT_TOKEN }}
+          javascript: 'true'
+          exclude: '(^.github/.*)'
+
+
