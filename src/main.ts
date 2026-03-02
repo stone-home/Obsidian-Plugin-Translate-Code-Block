@@ -84,6 +84,7 @@ export default class TranslateBlockPlugin extends Plugin {
 	}
 
 	private processTranslateBlock(source: string, el: HTMLElement, ctx: MarkdownPostProcessorContext) {
+		const decodedSource = this.decodeBlockContent(source);
 		const blockId = this.getBlockId(ctx, el);
 		const info = ctx.getSectionInfo(el);
 		const fenceConfig = this.parseFenceConfig(ctx, el);
@@ -93,8 +94,15 @@ export default class TranslateBlockPlugin extends Plugin {
 		const inputPanel = container.createDiv({ cls: "translate-block-input" });
 		inputPanel.createEl("div", { text: "Input", cls: "translate-block-panel-label" });
 		const inputArea = inputPanel.createEl("textarea", { cls: "translate-block-input-area" });
-		inputArea.value = source;
+		inputArea.value = decodedSource;
 		inputArea.placeholder = "Content to translate…";
+
+		const resizeInput = (): void => {
+			inputArea.style.height = "0";
+			const newHeight = Math.max(120, inputArea.scrollHeight);
+			inputArea.style.height = `${newHeight}px`;
+		};
+		requestAnimationFrame(() => resizeInput());
 
 		const controlsBar = container.createDiv({ cls: "translate-block-controls" });
 		const outputPanel = container.createDiv({ cls: "translate-block-output" });
@@ -102,7 +110,7 @@ export default class TranslateBlockPlugin extends Plugin {
 		const outputContent = outputPanel.createDiv({ cls: "translate-block-output-content" });
 		const statusEl = container.createDiv({ cls: "translate-block-status" });
 
-		const state = this.ensureBlockState(blockId, source, outputContent, statusEl, fenceConfig);
+		const state = this.ensureBlockState(blockId, decodedSource, outputContent, statusEl, fenceConfig);
 
 		// Keep state.sourceText in sync with the editable input, but do NOT
 		// continuously write back to the underlying note (that would re-render
@@ -111,7 +119,10 @@ export default class TranslateBlockPlugin extends Plugin {
 			state.sourceText = inputArea.value;
 			state.lastSourceHash = null;
 		};
-		inputArea.addEventListener("input", () => syncStateFromInput());
+		inputArea.addEventListener("input", () => {
+			syncStateFromInput();
+			resizeInput();
+		});
 		inputArea.addEventListener("change", () => syncStateFromInput());
 
 		// Controls: language selectors, translate button, auto toggle.
@@ -138,7 +149,10 @@ export default class TranslateBlockPlugin extends Plugin {
 		if (info && info.lineStart != null && info.lineEnd != null) {
 			const saveButton = controlsBar.createEl("button", { text: "Save to block" });
 			saveButton.addEventListener("click", () => {
-				const fenceLine = info.text.split("\n")[0] ?? "```translate-block";
+				const lines = info.text.split("\n");
+				const fenceLine =
+					lines.find((line) => line.trim().startsWith("```translate-block")) ??
+					"```translate-block";
 				void this.updateCodeBlockInFile(
 					ctx.sourcePath,
 					info.lineStart,
@@ -296,6 +310,27 @@ export default class TranslateBlockPlugin extends Plugin {
 		return `${ctx.sourcePath}:${Math.random().toString(36).slice(2)}`;
 	}
 
+	/** Zero-width space used to escape fence-like lines so they do not close the code block. */
+	private static readonly FENCE_ESCAPE = "\u200B";
+
+	/**
+	 * Encodes block content for saving: appends U+200B to any line that could be
+	 * interpreted as a closing fence (optional leading/trailing whitespace + 3+ backticks).
+	 */
+	private encodeBlockContentForSave(content: string): string {
+		const re = /^\s*`{3,}\s*$/;
+		return content.split(/\r?\n/).map((line) => (re.test(line) ? line + TranslateBlockPlugin.FENCE_ESCAPE : line)).join("\n");
+	}
+
+	/**
+	 * Decodes block content when loading: removes the trailing U+200B from lines
+	 * we encoded (fence-like line + U+200B), restoring the original fence line.
+	 */
+	private decodeBlockContent(source: string): string {
+		const re = /^(\s*`{3,}\s*)\u200B$/;
+		return source.split(/\r?\n/).map((line) => line.replace(re, "$1")).join("\n");
+	}
+
 	/**
 	 * Updates the code block content in the note file.
 	 * lineStart/lineEnd are 0-based (inclusive) indices into the file's line array.
@@ -315,7 +350,8 @@ export default class TranslateBlockPlugin extends Plugin {
 			// 0-based line numbers: block is lines[lineStart..lineEnd] inclusive.
 			const before = lines.slice(0, lineStart);
 			const after = lines.slice(lineEnd + 1);
-			const newBlockLines = [fenceLine, ...newContent.split(/\r?\n/), "```"];
+			const encoded = this.encodeBlockContentForSave(newContent);
+			const newBlockLines = [fenceLine, ...encoded.split(/\r?\n/), "```"];
 			const newFileContent = [...before, ...newBlockLines, ...after].join("\n");
 			await this.app.vault.modify(file, newFileContent);
 		} catch (e) {

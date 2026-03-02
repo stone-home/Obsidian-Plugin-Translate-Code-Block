@@ -664,6 +664,9 @@
   min-height: 120px;
   box-sizing: border-box;
   display: block;
+  font-size: calc(1em + 2px);
+  overflow: hidden;
+  resize: none;
 }
 
 .zettelkasten-settings-container-modern {
