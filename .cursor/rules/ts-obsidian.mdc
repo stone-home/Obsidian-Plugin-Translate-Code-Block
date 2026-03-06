@@ -1,5 +1,11 @@
 ---
-
+description: JavaScript/TypeScript standards (primary; Obsidian plugins)
+globs:
+  - "**/*.ts"
+  - "**/*.tsx"
+  - "**/*.js"
+  - "**/*.mjs"
+alwaysApply: false
 ---
 # JavaScript / TypeScript (Obsidian Plugins)
 

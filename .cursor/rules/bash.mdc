@@ -1,5 +1,9 @@
 ---
-
+description: Bash/shell script standards (strict mode, quoting, help)
+globs:
+  - "**/*.sh"
+  - "**/scripts/**"
+alwaysApply: false
 ---
 # Feature Planning & Requirements
 

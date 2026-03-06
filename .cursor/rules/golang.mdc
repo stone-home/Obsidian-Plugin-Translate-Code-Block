@@ -1,5 +1,8 @@
 ---
-
+description: Go coding standards (idioms, modules, error handling)
+globs:
+  - "**/*.go"
+alwaysApply: false
 ---
 # Feature Planning & Requirements
 

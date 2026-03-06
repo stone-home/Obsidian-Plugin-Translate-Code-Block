@@ -1,5 +1,6 @@
 ---
-
+description: Feature backlog and formal requirement docs (docs/feature backlog/, docs/requirements/)
+alwaysApply: true
 ---
 # Feature Planning & Requirements
 

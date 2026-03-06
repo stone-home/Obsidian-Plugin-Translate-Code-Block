@@ -1,5 +1,12 @@
 ---
-
+description: DevOps conventions (Kubernetes, Ansible, IaaS, autoDeploy, SSH)
+globs:
+  - "**/*.yaml"
+  - "**/*.yml"
+  - "**/Dockerfile*"
+  - "**/*.tf"
+  - "**/docker-compose*.yml"
+alwaysApply: false
 ---
 # Feature Planning & Requirements
 
