@@ -4,7 +4,6 @@ globs:
   - "docs/modules/**"
 alwaysApply: true
 ---
-
 # Module Documentation Standards
 
 **Context:** Create comprehensive documentation for logical modules. 
