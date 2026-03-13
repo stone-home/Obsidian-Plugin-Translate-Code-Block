@@ -6,23 +6,45 @@ alwaysApply: true
 
 **Context:** Manage agent plans and feature requirements based on user commands.
 
+## File Naming Convention
+- All generated planning or requirement documents MUST follow this naming convention:
+  `<type> - <summarization of note, max 50 characters>.md`
+- **Allowed Types:** `feat`, `fix`, `chore`, `refactor`, `docs`, `style`, `test`, `perf`, `ci`, `build`, `revert`.
+- **Example:** `feat - implement user authentication.md` or `refactor - update argocd layout.md`
+
 ## Draft Plans (Feature Backlog)
 
 - **Trigger:** When asked to "generate a plan".
 - **Action:** Document the agent's plan and requirements. Save to `docs/feature backlog/`.
-- **Naming:** `YYYYMMDD-<short-description>.md`
+- **Naming:** Must adhere to the File Naming Convention above.
 
 ## Formal Feature Requirements
 
 - **Trigger:** ONLY when explicitly asked to "generate a feature requirement".
 - **Action:** Move the draft note to (or create a new one in) `docs/requirements/`.
-- **Naming:** `<Type>-YYYYMMDD-<3_to_4_word_desc>.md` (Types: feature, fix, refactor, chore, etc.)
+- **Naming:** Must adhere to the File Naming Convention above.
 
 ## Required Document Structure
 
-Every planning or requirement document MUST start with PR and Commit templates at the very beginning of the file:
+Every planning or requirement document MUST start with the following exact YAML frontmatter, followed by the PR and Commit templates:
 
 ```markdown
+---
+title: <type> - <summarization of note, max 50 characters>
+id: <generate_unique_alphanumeric_id>
+create: YYYY-MM-DD
+tags:
+  - type/code-requirement
+aliases: []
+sources: []
+type: permanent
+url: 
+cssclasses: []
+project: ""
+status: done
+priority: medium
+release: v0.0.0
+---
 # Commit Message
 `<type>: <short description>`
 
