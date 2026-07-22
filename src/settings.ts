@@ -1,8 +1,12 @@
-import { App, PluginSettingTab, Setting } from "obsidian";
+import { App, DropdownComponent, PluginSettingTab, Setting } from "obsidian";
 import TranslateBlockPlugin from "./main";
+import { LANGUAGE_OPTIONS, resolveLanguage } from "./languages";
+import { parseModelList, resolveModel } from "./models";
 
 export interface TranslateBlockSettings {
 	endpointUrl: string;
+	/** Newline-separated model names for dropdowns. */
+	modelsRaw: string;
 	defaultModel: string;
 	defaultPrompt: string;
 	defaultSourceLang: string;
@@ -23,6 +27,7 @@ export const MIN_POLL_INTERVAL_MS = 500;
 
 export const DEFAULT_SETTINGS: TranslateBlockSettings = {
 	endpointUrl: "http://localhost:13434/api/chat",
+	modelsRaw: "llama3",
 	defaultModel: "llama3",
 	defaultPrompt:
 		"You are a translator. The user's next message is the exact text to translate. Translate it from {{sourceLang}} to {{targetLang}}. Reply with nothing but the translated text—no explanations, no \"please provide\" or meta-commentary.",
@@ -75,44 +80,105 @@ export class TranslateBlockSettingTab extends PluginSettingTab {
 					}),
 			);
 
+		const modelList = parseModelList(
+			this.plugin.settings.modelsRaw,
+			this.plugin.settings.defaultModel,
+		);
+		const defaultModel = resolveModel(modelList, this.plugin.settings.defaultModel);
+
+		let defaultModelDropdown: DropdownComponent | undefined;
+
+		new Setting(containerEl)
+			.setName("Models")
+			.setDesc("Model names available in dropdowns, one per line.")
+			.setClass("setting-control-on-new-line")
+			.addTextArea((text) => {
+				text
+					.setPlaceholder("llama3\nmistral\ntranslategemma:27b")
+					.setValue(this.plugin.settings.modelsRaw ?? DEFAULT_SETTINGS.modelsRaw)
+					.onChange(async (value) => {
+						this.plugin.settings.modelsRaw = value;
+						const list = parseModelList(value, this.plugin.settings.defaultModel);
+						this.plugin.settings.defaultModel = resolveModel(list, this.plugin.settings.defaultModel);
+						await this.plugin.saveSettings();
+						this.plugin.refreshWorkspaceModelOptions();
+						// Do not call display() here — it rebuilds the tab and steals focus on Enter/Backspace.
+					});
+				// Refresh Default model options when leaving the textarea (no full tab rebuild).
+				text.inputEl.addEventListener("blur", () => {
+					if (!defaultModelDropdown) return;
+					const list = parseModelList(
+						this.plugin.settings.modelsRaw,
+						this.plugin.settings.defaultModel,
+					);
+					const selected = resolveModel(list, this.plugin.settings.defaultModel);
+					defaultModelDropdown.selectEl.empty();
+					for (const name of list) {
+						defaultModelDropdown.addOption(name, name);
+					}
+					defaultModelDropdown.setValue(selected);
+					this.plugin.settings.defaultModel = selected;
+				});
+			});
+
 		new Setting(containerEl)
 			.setName("Default model")
-			.setDesc("Model name to send to the translation backend.")
-			.addText((text) =>
-				text
-					.setPlaceholder(DEFAULT_SETTINGS.defaultModel)
-					.setValue(this.plugin.settings.defaultModel)
-					.onChange(async (value) => {
-						this.plugin.settings.defaultModel = value.trim() || DEFAULT_SETTINGS.defaultModel;
-						await this.plugin.saveSettings();
-					}),
-			);
+			.setDesc("Model used when a block or panel does not override it.")
+			.addDropdown((dropdown) => {
+				defaultModelDropdown = dropdown;
+				for (const name of modelList) {
+					dropdown.addOption(name, name);
+				}
+				dropdown.setValue(defaultModel).onChange(async (value) => {
+					const list = parseModelList(
+						this.plugin.settings.modelsRaw,
+						this.plugin.settings.defaultModel,
+					);
+					this.plugin.settings.defaultModel = resolveModel(list, value);
+					await this.plugin.saveSettings();
+					this.plugin.refreshWorkspaceModelOptions();
+				});
+			});
 
 		new Setting(containerEl)
 			.setName("Default source language")
-			.setDesc("Language code of the source text (e.g. auto, en, zh).")
-			.addText((text) =>
-				text
-					.setPlaceholder(DEFAULT_SETTINGS.defaultSourceLang)
-					.setValue(this.plugin.settings.defaultSourceLang)
+			.setDesc("Language of the source text.")
+			.addDropdown((dropdown) => {
+				for (const code of LANGUAGE_OPTIONS) {
+					dropdown.addOption(code, code);
+				}
+				dropdown
+					.setValue(
+						resolveLanguage(this.plugin.settings.defaultSourceLang, DEFAULT_SETTINGS.defaultSourceLang),
+					)
 					.onChange(async (value) => {
-						this.plugin.settings.defaultSourceLang = value.trim() || DEFAULT_SETTINGS.defaultSourceLang;
+						this.plugin.settings.defaultSourceLang = resolveLanguage(
+							value,
+							DEFAULT_SETTINGS.defaultSourceLang,
+						);
 						await this.plugin.saveSettings();
-					}),
-			);
+					});
+			});
 
 		new Setting(containerEl)
 			.setName("Default target language")
-			.setDesc("Language code to translate into (e.g. en, zh).")
-			.addText((text) =>
-				text
-					.setPlaceholder(DEFAULT_SETTINGS.defaultTargetLang)
-					.setValue(this.plugin.settings.defaultTargetLang)
+			.setDesc("Language to translate into.")
+			.addDropdown((dropdown) => {
+				for (const code of LANGUAGE_OPTIONS) {
+					dropdown.addOption(code, code);
+				}
+				dropdown
+					.setValue(
+						resolveLanguage(this.plugin.settings.defaultTargetLang, DEFAULT_SETTINGS.defaultTargetLang),
+					)
 					.onChange(async (value) => {
-						this.plugin.settings.defaultTargetLang = value.trim() || DEFAULT_SETTINGS.defaultTargetLang;
+						this.plugin.settings.defaultTargetLang = resolveLanguage(
+							value,
+							DEFAULT_SETTINGS.defaultTargetLang,
+						);
 						await this.plugin.saveSettings();
-					}),
-			);
+					});
+			});
 
 		new Setting(containerEl)
 			.setName("Poll interval (ms)")

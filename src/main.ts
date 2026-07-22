@@ -1,4 +1,6 @@
-import { MarkdownPostProcessorContext, Notice, Plugin } from "obsidian";
+import { MarkdownPostProcessorContext, Notice, Plugin, WorkspaceLeaf } from "obsidian";
+import { parseModelList, populateModelSelect, resolveModel } from "./models";
+import { resolveLanguage } from "./languages";
 import {
 	DEFAULT_SETTINGS,
 	MIN_POLL_INTERVAL_MS,
@@ -6,36 +8,36 @@ import {
 	TranslateBlockSettings,
 } from "./settings";
 import { TranslationBackend, createDefaultBackend } from "./translation-backend";
-
-type TranslateMode = "manual" | "auto";
-
-interface TranslateBlockState {
-	id: string;
-	sourceLang: string;
-	targetLang: string;
-	model: string;
-	prompt: string;
-	sourceText: string;
-	lastSourceHash: string | null;
-	inFlight: boolean;
-	retryCount: number;
-	lastError?: string;
-	lastUpdatedAt?: number;
-	mode: TranslateMode;
-	outputEl: HTMLElement;
-	statusEl: HTMLElement;
-	autoToggleEl?: HTMLInputElement;
-}
+import { TranslatePanelView, VIEW_TYPE_TRANSLATE_PANEL } from "./translate-panel-view";
+import {
+	TranslateWorkspaceHost,
+	TranslateWorkspaceState,
+	mountTranslateWorkspace,
+} from "./translate-workspace";
 
 export default class TranslateBlockPlugin extends Plugin {
 	settings: TranslateBlockSettings = DEFAULT_SETTINGS;
-	private blockStates = new Map<string, TranslateBlockState>();
+	private workspaceStates = new Map<string, TranslateWorkspaceState>();
 	private backend: TranslationBackend | undefined;
 	private pollIntervalId: number | undefined;
 
 	async onload() {
 		await this.loadSettings();
 		this.backend = createDefaultBackend();
+
+		this.registerView(VIEW_TYPE_TRANSLATE_PANEL, (leaf) => new TranslatePanelView(leaf, this));
+
+		this.addRibbonIcon("languages", "Open Translate Panel", () => {
+			void this.activateTranslatePanel();
+		});
+
+		this.addCommand({
+			id: "open-translate-panel",
+			name: "Open Translate Panel",
+			callback: () => {
+				void this.activateTranslatePanel();
+			},
+		});
 
 		this.registerMarkdownCodeBlockProcessor("translate-block", (source, el, ctx) => {
 			this.processTranslateBlock(source, el, ctx);
@@ -50,27 +52,109 @@ export default class TranslateBlockPlugin extends Plugin {
 		if (this.pollIntervalId !== undefined) {
 			window.clearInterval(this.pollIntervalId);
 		}
-		this.blockStates.clear();
+		this.workspaceStates.clear();
+	}
+
+	/** Narrow API for TranslateWorkspace mounts (panel + blocks). */
+	getWorkspaceHost(): TranslateWorkspaceHost {
+		return {
+			getModelList: () => this.getModelList(),
+			defaultSourceLang: this.settings.defaultSourceLang,
+			defaultTargetLang: this.settings.defaultTargetLang,
+			defaultModel: this.settings.defaultModel,
+			isValidLang: (value) => this.isValidLang(value),
+			registerWorkspace: (state) => this.registerWorkspace(state),
+			triggerManualTranslate: (id) => this.triggerManualTranslate(id),
+		};
+	}
+
+	getModelList(): string[] {
+		return parseModelList(this.settings.modelsRaw, this.settings.defaultModel);
+	}
+
+	registerWorkspace(incoming: TranslateWorkspaceState): void {
+		const existing = this.workspaceStates.get(incoming.id);
+		if (existing) {
+			incoming.mode = existing.mode;
+			incoming.inFlight = existing.inFlight;
+			incoming.lastSourceHash = existing.lastSourceHash;
+			incoming.retryCount = existing.retryCount;
+			incoming.lastError = existing.lastError;
+			incoming.lastUpdatedAt = existing.lastUpdatedAt;
+		}
+		this.workspaceStates.set(incoming.id, incoming);
+	}
+
+	unregisterWorkspace(id: string): void {
+		this.workspaceStates.delete(id);
+	}
+
+	refreshWorkspaceModelOptions(): void {
+		const list = this.getModelList();
+		for (const state of this.workspaceStates.values()) {
+			state.model = resolveModel(list, state.model);
+			if (state.modelSelectEl) {
+				populateModelSelect(state.modelSelectEl, list, state.model);
+			}
+		}
+	}
+
+	async activateTranslatePanel(): Promise<void> {
+		const { workspace } = this.app;
+		const existing = workspace.getLeavesOfType(VIEW_TYPE_TRANSLATE_PANEL);
+		if (existing.length > 0) {
+			workspace.revealLeaf(existing[0]);
+			return;
+		}
+
+		const rightLeaf = workspace.getRightLeaf(false);
+		const leaf: WorkspaceLeaf = rightLeaf ?? workspace.getLeaf("tab");
+		await leaf.setViewState({ type: VIEW_TYPE_TRANSLATE_PANEL, active: true });
+		workspace.revealLeaf(leaf);
 	}
 
 	private async loadSettings() {
 		const data = (await this.loadData()) as Partial<TranslateBlockSettings> | null;
 		const merged: TranslateBlockSettings = Object.assign({}, DEFAULT_SETTINGS, data ?? {});
-		// Clamp poll interval to minimum.
 		if (!merged.pollIntervalMs || merged.pollIntervalMs < MIN_POLL_INTERVAL_MS) {
-			merged.pollIntervalMs = Math.max(MIN_POLL_INTERVAL_MS, merged.pollIntervalMs || DEFAULT_SETTINGS.pollIntervalMs);
+			merged.pollIntervalMs = Math.max(
+				MIN_POLL_INTERVAL_MS,
+				merged.pollIntervalMs || DEFAULT_SETTINGS.pollIntervalMs,
+			);
 		}
+		if (!merged.modelsRaw?.trim()) {
+			merged.modelsRaw = merged.defaultModel?.trim() || DEFAULT_SETTINGS.modelsRaw;
+		}
+		const list = parseModelList(merged.modelsRaw, merged.defaultModel);
+		merged.defaultModel = resolveModel(list, merged.defaultModel);
+		merged.defaultSourceLang = resolveLanguage(
+			merged.defaultSourceLang,
+			DEFAULT_SETTINGS.defaultSourceLang,
+		);
+		merged.defaultTargetLang = resolveLanguage(
+			merged.defaultTargetLang,
+			DEFAULT_SETTINGS.defaultTargetLang,
+		);
 		this.settings = merged;
 	}
 
 	async saveSettings() {
-		// Ensure poll interval is always clamped before persisting.
 		if (!this.settings.pollIntervalMs || this.settings.pollIntervalMs < MIN_POLL_INTERVAL_MS) {
 			this.settings.pollIntervalMs = Math.max(
 				MIN_POLL_INTERVAL_MS,
 				this.settings.pollIntervalMs || DEFAULT_SETTINGS.pollIntervalMs,
 			);
 		}
+		const list = parseModelList(this.settings.modelsRaw, this.settings.defaultModel);
+		this.settings.defaultModel = resolveModel(list, this.settings.defaultModel);
+		this.settings.defaultSourceLang = resolveLanguage(
+			this.settings.defaultSourceLang,
+			DEFAULT_SETTINGS.defaultSourceLang,
+		);
+		this.settings.defaultTargetLang = resolveLanguage(
+			this.settings.defaultTargetLang,
+			DEFAULT_SETTINGS.defaultTargetLang,
+		);
 		await this.saveData(this.settings);
 	}
 
@@ -78,7 +162,7 @@ export default class TranslateBlockPlugin extends Plugin {
 		const interval = this.settings.pollIntervalMs || DEFAULT_SETTINGS.pollIntervalMs;
 		const effectiveInterval = Math.max(MIN_POLL_INTERVAL_MS, interval);
 		this.pollIntervalId = window.setInterval(() => {
-			void this.pollBlocks();
+			void this.pollWorkspaces();
 		}, effectiveInterval);
 		this.registerInterval(this.pollIntervalId);
 	}
@@ -88,156 +172,44 @@ export default class TranslateBlockPlugin extends Plugin {
 		const blockId = this.getBlockId(ctx, el);
 		const info = ctx.getSectionInfo(el);
 		const fenceConfig = this.parseFenceConfig(ctx, el);
+		const models = this.getModelList();
 
-		const container = el.createDiv({ cls: "translate-block-container" });
+		el.empty();
 
-		const inputPanel = container.createDiv({ cls: "translate-block-input" });
-		inputPanel.createEl("div", { text: "Input", cls: "translate-block-panel-label" });
-		const inputArea = inputPanel.createEl("textarea", { cls: "translate-block-input-area" });
-		inputArea.value = decodedSource;
-		inputArea.placeholder = "Content to translate…";
+		const onSaveToBlock =
+			info && info.lineStart != null && info.lineEnd != null
+				? () => {
+						const lines = info.text.split("\n");
+						const fenceLine =
+							lines.find((line) => line.trim().startsWith("```translate-block")) ??
+							"```translate-block";
+						const state = this.workspaceStates.get(blockId);
+						const content = state?.sourceText ?? decodedSource;
+						void this.updateCodeBlockInFile(
+							ctx.sourcePath,
+							info.lineStart,
+							info.lineEnd,
+							fenceLine,
+							content,
+						);
+					}
+				: undefined;
 
-		const resizeInput = (): void => {
-			inputArea.style.height = "0";
-			const newHeight = Math.max(120, inputArea.scrollHeight);
-			inputArea.style.height = `${newHeight}px`;
-		};
-		requestAnimationFrame(() => resizeInput());
-
-		const controlsBar = container.createDiv({ cls: "translate-block-controls" });
-		const outputPanel = container.createDiv({ cls: "translate-block-output" });
-		outputPanel.createEl("div", { text: "Output", cls: "translate-block-panel-label" });
-		const outputContent = outputPanel.createDiv({ cls: "translate-block-output-content" });
-		const statusEl = container.createDiv({ cls: "translate-block-status" });
-
-		const state = this.ensureBlockState(blockId, decodedSource, outputContent, statusEl, fenceConfig);
-
-		// Keep state.sourceText in sync with the editable input, but do NOT
-		// continuously write back to the underlying note (that would re-render
-		// the preview and steal focus).
-		const syncStateFromInput = (): void => {
-			state.sourceText = inputArea.value;
-			state.lastSourceHash = null;
-		};
-		inputArea.addEventListener("input", () => {
-			syncStateFromInput();
-			resizeInput();
+		mountTranslateWorkspace(el, this.getWorkspaceHost(), {
+			id: blockId,
+			initialSourceText: decodedSource,
+			initialSourceLang: fenceConfig.sourceLang || this.settings.defaultSourceLang,
+			initialTargetLang: fenceConfig.targetLang || this.settings.defaultTargetLang,
+			initialModel: resolveModel(models, fenceConfig.model || this.settings.defaultModel),
+			prompt: fenceConfig.prompt?.trim() || this.settings.defaultPrompt,
+			onSaveToBlock,
 		});
-		inputArea.addEventListener("change", () => syncStateFromInput());
-
-		// Controls: language selectors, translate button, auto toggle.
-		const sourceSelect = controlsBar.createEl("select");
-		const targetSelect = controlsBar.createEl("select");
-
-		this.populateLanguageSelect(sourceSelect, state.sourceLang);
-		this.populateLanguageSelect(targetSelect, state.targetLang);
-
-		sourceSelect.addEventListener("change", () => {
-			state.sourceLang = sourceSelect.value || this.settings.defaultSourceLang;
-		});
-		targetSelect.addEventListener("change", () => {
-			state.targetLang = targetSelect.value || this.settings.defaultTargetLang;
-		});
-
-		const translateButton = controlsBar.createEl("button", { text: "Translate" });
-		translateButton.addEventListener("click", () => {
-			void this.triggerManualTranslate(state.id);
-		});
-
-		// Optional: explicit write-back button for when the user wants to sync
-		// the current input content back into the markdown code block.
-		if (info && info.lineStart != null && info.lineEnd != null) {
-			const saveButton = controlsBar.createEl("button", { text: "Save to block" });
-			saveButton.addEventListener("click", () => {
-				const lines = info.text.split("\n");
-				const fenceLine =
-					lines.find((line) => line.trim().startsWith("```translate-block")) ??
-					"```translate-block";
-				void this.updateCodeBlockInFile(
-					ctx.sourcePath,
-					info.lineStart,
-					info.lineEnd,
-					fenceLine,
-					inputArea.value,
-				);
-			});
-		}
-
-		const autoLabel = controlsBar.createEl("label");
-		const autoToggle = autoLabel.createEl("input", { type: "checkbox" });
-		state.autoToggleEl = autoToggle;
-		autoLabel.appendText(" Auto");
-
-		autoToggle.checked = state.mode === "auto";
-		autoToggle.addEventListener("change", () => {
-			state.mode = autoToggle.checked ? "auto" : "manual";
-			if (state.mode === "auto") {
-				statusEl.setText("Auto mode enabled. Waiting for changes…");
-			} else {
-				statusEl.setText("Manual mode. Click Translate to run.");
-			}
-		});
-
-		// Initial status.
-		if (state.mode === "auto") {
-			statusEl.setText("Auto mode enabled. Waiting for changes…");
-		} else {
-			statusEl.setText("Manual mode. Click Translate to run.");
-		}
-	}
-
-	private ensureBlockState(
-		id: string,
-		sourceText: string,
-		outputEl: HTMLElement,
-		statusEl: HTMLElement,
-		config?: Partial<Pick<TranslateBlockState, "sourceLang" | "targetLang" | "model" | "prompt">>,
-	): TranslateBlockState {
-		let state = this.blockStates.get(id);
-		const sourceLang =
-			config?.sourceLang && this.isValidLang(config.sourceLang)
-				? config.sourceLang
-				: this.settings.defaultSourceLang;
-		const targetLang =
-			config?.targetLang && this.isValidLang(config.targetLang)
-				? config.targetLang
-				: this.settings.defaultTargetLang;
-		const model = config?.model?.trim() || this.settings.defaultModel;
-		const prompt = config?.prompt?.trim() || this.settings.defaultPrompt;
-
-		if (!state) {
-			state = {
-				id,
-				sourceLang,
-				targetLang,
-				model,
-				prompt,
-				sourceText,
-				lastSourceHash: null,
-				inFlight: false,
-				retryCount: 0,
-				mode: "manual",
-				outputEl,
-				statusEl,
-			};
-			this.blockStates.set(id, state);
-		} else {
-			state.sourceText = sourceText;
-			state.sourceLang = sourceLang;
-			state.targetLang = targetLang;
-			state.model = model;
-			state.prompt = prompt;
-			state.outputEl = outputEl;
-			state.statusEl = statusEl;
-		}
-
-		return state;
 	}
 
 	private parseFenceConfig(
 		ctx: MarkdownPostProcessorContext,
 		el: HTMLElement,
-	): Partial<Pick<TranslateBlockState, "sourceLang" | "targetLang" | "model" | "prompt">> {
+	): Partial<Pick<TranslateWorkspaceState, "sourceLang" | "targetLang" | "model" | "prompt">> {
 		const info = ctx.getSectionInfo(el);
 		if (!info || !info.text) {
 			return {};
@@ -252,10 +224,10 @@ export default class TranslateBlockPlugin extends Plugin {
 		const trimmed = fenceLine.trim();
 		const withoutTicks = trimmed.startsWith("```") ? trimmed.slice(3).trim() : trimmed;
 		const parts = withoutTicks.split(/\s+/);
-		// First token should be "translate-block".
 		const [, ...rest] = parts;
 
-		const result: Partial<Pick<TranslateBlockState, "sourceLang" | "targetLang" | "model" | "prompt">> = {};
+		const result: Partial<Pick<TranslateWorkspaceState, "sourceLang" | "targetLang" | "model" | "prompt">> =
+			{};
 
 		for (const token of rest) {
 			const eqIndex = token.indexOf("=");
@@ -291,17 +263,6 @@ export default class TranslateBlockPlugin extends Plugin {
 		return result;
 	}
 
-	private populateLanguageSelect(select: HTMLSelectElement, current: string) {
-		const options = ["auto", "en", "zh", "ja", "fr", "de", "es"];
-		select.empty();
-		for (const value of options) {
-			const opt = select.createEl("option", { value, text: value });
-			if (value === current) {
-				opt.selected = true;
-			}
-		}
-	}
-
 	private getBlockId(ctx: MarkdownPostProcessorContext, el: HTMLElement): string {
 		const info = ctx.getSectionInfo(el);
 		if (info) {
@@ -319,7 +280,10 @@ export default class TranslateBlockPlugin extends Plugin {
 	 */
 	private encodeBlockContentForSave(content: string): string {
 		const re = /^\s*`{3,}\s*$/;
-		return content.split(/\r?\n/).map((line) => (re.test(line) ? line + TranslateBlockPlugin.FENCE_ESCAPE : line)).join("\n");
+		return content
+			.split(/\r?\n/)
+			.map((line) => (re.test(line) ? line + TranslateBlockPlugin.FENCE_ESCAPE : line))
+			.join("\n");
 	}
 
 	/**
@@ -328,7 +292,10 @@ export default class TranslateBlockPlugin extends Plugin {
 	 */
 	private decodeBlockContent(source: string): string {
 		const re = /^(\s*`{3,}\s*)\u200B$/;
-		return source.split(/\r?\n/).map((line) => line.replace(re, "$1")).join("\n");
+		return source
+			.split(/\r?\n/)
+			.map((line) => line.replace(re, "$1"))
+			.join("\n");
 	}
 
 	/**
@@ -347,7 +314,6 @@ export default class TranslateBlockPlugin extends Plugin {
 		try {
 			const content = await this.app.vault.read(file);
 			const lines = content.split(/\r?\n/);
-			// 0-based line numbers: block is lines[lineStart..lineEnd] inclusive.
 			const before = lines.slice(0, lineStart);
 			const after = lines.slice(lineEnd + 1);
 			const encoded = this.encodeBlockContentForSave(newContent);
@@ -361,11 +327,11 @@ export default class TranslateBlockPlugin extends Plugin {
 		}
 	}
 
-	private async pollBlocks() {
+	private async pollWorkspaces() {
 		if (!this.backend) {
 			this.backend = createDefaultBackend();
 		}
-		for (const state of this.blockStates.values()) {
+		for (const state of this.workspaceStates.values()) {
 			if (state.mode !== "auto") continue;
 			if (state.inFlight) continue;
 
@@ -385,17 +351,12 @@ export default class TranslateBlockPlugin extends Plugin {
 		}
 	}
 
-	private computeHash(state: TranslateBlockState): string {
-		const key = [
-			state.sourceText,
-			state.sourceLang,
-			state.targetLang,
-			state.model,
-			state.prompt,
-		].join("||");
+	private computeHash(state: TranslateWorkspaceState): string {
+		const key = [state.sourceText, state.sourceLang, state.targetLang, state.model, state.prompt].join(
+			"||",
+		);
 		let hash = 0;
 		for (let i = 0; i < key.length; i += 1) {
-			// Simple string hash sufficient for change detection.
 			// eslint-disable-next-line no-bitwise
 			hash = (hash << 5) - hash + key.charCodeAt(i);
 			// eslint-disable-next-line no-bitwise
@@ -407,7 +368,6 @@ export default class TranslateBlockPlugin extends Plugin {
 	private isValidLang(value: string): boolean {
 		const v = value.trim();
 		if (!v) return false;
-		// Allow common language codes like en, zh, ja, fr, de, es, auto, and BCP-47 variants.
 		return /^[a-zA-Z-]+$/.test(v);
 	}
 
@@ -419,7 +379,7 @@ export default class TranslateBlockPlugin extends Plugin {
 		if (!this.backend) {
 			this.backend = createDefaultBackend();
 		}
-		const state = this.blockStates.get(blockId);
+		const state = this.workspaceStates.get(blockId);
 		if (!state) return;
 
 		if (state.inFlight) {
@@ -448,21 +408,31 @@ export default class TranslateBlockPlugin extends Plugin {
 		let attempt = 0;
 		let lastErrorMessage: string | undefined;
 
+		const model = resolveModel(this.getModelList(), state.model);
+
 		while (attempt < maxAttempts) {
 			attempt += 1;
 			state.retryCount = attempt;
 			try {
-				const translated = await this.backend.translate(state.sourceText, state.sourceLang, state.targetLang, {
-					endpointUrl: this.settings.endpointUrl,
-					model: state.model,
-					timeoutMs: this.settings.timeoutMs,
-					prompt: state.prompt,
-					extraHeadersRaw: this.settings.extraHeadersRaw,
-					debug: this.settings.debug,
-				});
+				const translated = await this.backend.translate(
+					state.sourceText,
+					state.sourceLang,
+					state.targetLang,
+					{
+						endpointUrl: this.settings.endpointUrl,
+						model,
+						timeoutMs: this.settings.timeoutMs,
+						prompt: state.prompt,
+						extraHeadersRaw: this.settings.extraHeadersRaw,
+						debug: this.settings.debug,
+					},
+				);
 
 				state.outputEl.empty();
-				const pre = state.outputEl.createEl("pre", { text: translated, cls: "translate-block-output-pre" });
+				const pre = state.outputEl.createEl("pre", {
+					text: translated,
+					cls: "translate-block-output-pre",
+				});
 				pre.setAttribute("contenteditable", "false");
 
 				state.lastSourceHash = hash;
@@ -480,7 +450,6 @@ export default class TranslateBlockPlugin extends Plugin {
 					break;
 				}
 
-				// Small delay before retrying a soft error.
 				// eslint-disable-next-line no-await-in-loop
 				await new Promise((resolve) => window.setTimeout(resolve, 300));
 			}
@@ -500,7 +469,8 @@ export default class TranslateBlockPlugin extends Plugin {
 	private isSoftErrorMessage(message: string): boolean {
 		const lower = message.toLowerCase();
 		if (lower.includes("timeout") || lower.includes("network")) return true;
-		if (lower.includes("502") || lower.includes("503") || lower.includes("504") || lower.includes("500")) return true;
+		if (lower.includes("502") || lower.includes("503") || lower.includes("504") || lower.includes("500"))
+			return true;
 		return false;
 	}
 }

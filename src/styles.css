@@ -669,6 +669,51 @@
   resize: none;
 }
 
+/* Side panel translator leaf */
+.translate-panel-view {
+  padding: 0.75rem;
+  overflow-x: hidden;
+  overflow-y: auto;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+.translate-panel-container {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+.translate-block-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0.5rem 0;
+}
+.translate-block-model-select {
+  max-width: 12rem;
+}
+
+/* Output: keep long translations inside the panel/block width */
+.translate-block-output,
+.translate-block-output-content {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+  overflow-x: hidden;
+}
+.translate-block-output-pre {
+  width: 100%;
+  max-width: 100%;
+  margin: 0;
+  box-sizing: border-box;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  overflow-x: hidden;
+}
+
 .zettelkasten-settings-container-modern {
 }
 .settings-title-modern {
